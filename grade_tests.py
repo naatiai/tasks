@@ -81,8 +81,8 @@ for i, qa in enumerate(mock_answers):
         ans_lang = str(qa[1].answer_language).title()
 
         # Transcribe
-        transcription = transcribe(
-            f"{download_folder}/{file_name}", language=ans_lang)
+        # transcription = transcribe(
+        # f"{download_folder}/{file_name}", language=ans_lang)
 
         transcription = openai_transcribe(
             f"{download_folder}/{file_name}", language=ans_lang, api_key=API_KEY)
@@ -96,9 +96,9 @@ for i, qa in enumerate(mock_answers):
         # Grading
         ref_answer = qa[1].transcript
         user_answer = transcription
-        score = ollama_grade_translation(
-            ref_answer, user_answer, language=ans_lang)
-        # score = grade_translation(ref_answer, user_answer, API_KEY, language=ans_lang)
+        # score = ollama_grade_translation(ref_answer, user_answer, language=ans_lang)
+        score = grade_translation(
+            ref_answer, user_answer, API_KEY, language=ans_lang)
         print("[+] Score:", score)
 
     except Exception as ex:
@@ -148,18 +148,18 @@ for i, qa in enumerate(mock_answers):
 
 
 # Delete Audio File from Supabase
-    try:
-        # Delete the file
-        success = delete_supabase_file(
-            prefix, file_name, SUPABASE_BUCKET, SUPABASE_URL, SUPABASE_KEY)
+    # try:
+    #     # Delete the file
+    #     success = delete_supabase_file(
+    #         prefix, file_name, SUPABASE_BUCKET, SUPABASE_URL, SUPABASE_KEY)
 
-        if success:
-            print("File deleted successfully.")
-        else:
-            print("Failed to delete the file.")
+    #     if success:
+    #         print("File deleted successfully.")
+    #     else:
+    #         print("Failed to delete the file.")
 
-    except Exception as ex:
-        print(f"[-] Error updaring userMock: {ex}, Loop {i}")
+    # except Exception as ex:
+    #     print(f"[-] Error updaring userMock: {ex}, Loop {i}")
 
 # Close the session
 session.close()

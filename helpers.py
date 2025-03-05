@@ -1,4 +1,11 @@
+import os
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+import smtplib
 import re
+import requests
+from dotenv import load_dotenv
+
 import whisper
 from supabase import create_client
 # from supabase.storage import StorageException
@@ -16,6 +23,11 @@ from sqlalchemy import and_
 
 import warnings
 warnings.simplefilter(action='ignore', category=FutureWarning)
+
+
+def get_mock_question_count(session, mock_id):
+    """Fetch the total number of questions for a given mock test."""
+    return session.query(MockQuestions).filter(MockQuestions.mock_id == mock_id).count()
 
 
 def extract_score(ai_response) -> int:
@@ -257,29 +269,63 @@ def delete_supabase_file(path_prefix: str, file_name: str, bucket_name: str, sup
 
 def grade_translation(reference, answer, api_key, language):
 
-    prompt = f"""
-    You need to evaluate a user's translation test. You will be provided with two texts in {language}: a reference answer and a student's answer. 
+    # prompt = f"""
+    # You need to evaluate a user's translation test. You will be provided with two texts in {language}: a reference answer and a student's answer.
 
+    # Reference:
+    # {reference}
+
+    # Answer:
+    # {answer}
+
+    # Your task is to:
+    # 1. Compare the two texts based on **accuracy** (matching details and content) and **correctness** (faithful interpretation of the reference).
+    # 2. Ignore differences in punctuation, spaces, or minor grammatical errors unless they affect the correctness or interpretation of the text.
+    # 3. Focus specifically on how well the student's response matches the intended meaning and correctness of the reference text.
+
+    # Provide a score out of 5, where:
+    # - 5 = Perfect match, fully accurate and correct interpretation.
+    # - 4 = Very minor errors that don't affect overall correctness.
+    # - 3 = Noticeable errors but the general meaning is retained.
+    # - 2 = Significant errors that distort meaning but show some understanding.
+    # - 1 = Poor understanding or largely incorrect.
+    # - 0 = No resemblance.
+
+    # Return only the numeric score (0-5). Do not include any explanations or other text in your response.
+    # """
+
+    prompt = f"""
+    Evaluate this {language} translation test comparing reference and student answer:
     Reference:
     {reference}
-
     Answer:
     {answer}
 
-    Your task is to:
-    1. Compare the two texts based on **accuracy** (matching details and content) and **correctness** (faithful interpretation of the reference).
-    2. Ignore differences in punctuation, spaces, or minor grammatical errors unless they affect the correctness or interpretation of the text.
-    3. Focus specifically on how well the student's response matches the intended meaning and correctness of the reference text.
+    Compare based on:
+    1. Accuracy: Exact match of details, numbers, names
+    2. Correctness: Precise meaning preservation
+    3. Completeness: All essential information included
 
-    Provide a score out of 5, where:
-    - 5 = Perfect match, fully accurate and correct interpretation.
-    - 4 = Very minor errors that don't affect overall correctness.
-    - 3 = Noticeable errors but the general meaning is retained.
-    - 2 = Significant errors that distort meaning but show some understanding.
-    - 1 = Poor understanding or largely incorrect.
-    - 0 = No resemblance.
+    Mark down for:
+    - Omissions/additions
+    - Tone/emphasis changes
+    - Meaning-altering word choices
+    - Word count mismatch (-1 point if different) 
 
-    Return only the numeric score (0-5). Do not include any explanations or other text in your response.
+    Ignore only:
+    - Spacing, formatting
+    - Capitalization (except proper nouns)
+    - Minor article usage if meaning intact
+
+    Score (0-5):
+    5: Perfect match
+    4: 1-2 minor word variations
+    3: 3-4 minor or 1 moderate error
+    2: Multiple moderate or 1-2 major errors
+    1: Significant meaning alterations
+    0: Incomprehensible/incorrect
+
+    Return only numeric score (0-5).
     """
     client = OpenAI(
         api_key=api_key
@@ -369,10 +415,23 @@ def openai_transcribe(audio_file, language, api_key):
         str: The transcribed text.
     """
     client = OpenAI(api_key=api_key)
-    lang = Language.get(language[:3]).is_valid()
-    print(f"-> Language: {language[:3]} {lang}")
+
+    if language.lower() == "english":
+        iso_lang = "en"
+    elif language.lower() == "hindi":
+        iso_lang = "hi"
+    elif language.lower() == "mandarin":
+        iso_lang = "zh"
+    elif language.lower() == "tamil":
+        iso_lang = "ta"
+    else:
+        iso_lang = "en"
+    lang = Language.get(iso_lang).is_valid()
+    # lang = Language.get(language[:3]).is_valid()
+    print(f"-> Language: {language} {iso_lang} {lang}")
     if lang is True:
-        iso_lang = Language.get(language[:3]).to_tag()
+        # lang = Language.get(iso_lang).to_tag()
+        # iso_lang = Language.get(language[:3]).to_tag()
         audio_file = open(audio_file, "rb")
         translation = client.audio.transcriptions.create(
             model="whisper-1",
@@ -389,3 +448,137 @@ def openai_transcribe(audio_file, language, api_key):
         )
     print("-> Translation ", translation.text)
     return translation.text
+
+
+def send_test_result_email(recipient_email: str, link: str, passed: bool):
+    """
+    Sends an email to notify the user of their test result via Postmark.
+
+    Args:
+        recipient_email (str): The recipient's email address.
+        link (str): The link to view detailed results.
+        passed (bool): True if the user passed, False otherwise.
+    """
+    # Load environment variables
+    load_dotenv()
+
+    POSTMARK_API_TOKEN = os.getenv("POSTMARK_API_TOKEN")
+    EMAIL_USER = os.getenv("EMAIL_USER", "support@naatininja.com")
+
+    if not POSTMARK_API_TOKEN:
+        raise ValueError(
+            "[-] POSTMARK_API_TOKEN must be set in the environment variables.")
+
+    # Email content templates
+    # Email content templates
+    passed_template = f"""
+    <html>
+    <body style="font-family: Arial, sans-serif; background-color: #f4f4f4; margin: 0; padding: 20px;">
+        <div style="max-width: 600px; margin: auto; background: #ffffff; padding: 20px; border-radius: 8px; border: 1px solid #ddd;">
+            <div style="text-align: center; padding: 20px 0; color: black;">
+                <img src='https://app.naatininja.com/logo.png' alt='NAATI Ninja' style='width: 150px; margin-bottom: 20px;'>
+                <h1 style="color: #333;">Fantastic News, You Passed! 🎉</h1>
+            </div>
+            <div style="padding: 20px; font-size: 16px; color: #333;">
+                <p>Great job! Your test has been graded, and we're excited to let you know that you've <b>passed</b>! All your effort and dedication have paid off. 🎊</p>
+                <p>Click below to view your detailed results:</p>
+                <div style="text-align: center; margin-top: 20px;">
+                    <a href="{link}" style="padding: 12px 24px; background-color: #f7941e; color: white; text-decoration: none; border-radius: 5px; font-size: 16px; display: inline-block;">View Results</a>
+                </div>
+                <p style="margin-top: 20px;">Keep up the great work, and best of luck with your journey ahead!</p>
+            </div>
+            <hr style="border: none; border-top: 1px solid #ddd; margin: 20px 0;">
+            <p style="font-size: 12px; text-align: center; color: #777;">This is an automated email. Please do not reply. If you need assistance, contact us at <a href="mailto:support@naatininja.com" style="color: #099f9e; text-decoration: none;">support@naatininja.com</a>.</p>
+        </div>
+    </body>
+    </html>
+    """
+
+    failed_template = f"""
+    <html>
+    <body style="font-family: Arial, sans-serif; background-color: #f4f4f4; margin: 0; padding: 20px;">
+        <div style="max-width: 600px; margin: auto; background: #ffffff; padding: 20px; border-radius: 8px; border: 1px solid #ddd;">
+            <div style="text-align: center; padding: 20px 0; color: black;">
+                <img src='https://app.naatininja.com/logo.png' alt='NAATI Ninja' style='width: 150px; margin-bottom: 20px;'>
+                <h1 style="color: #333;">Don't Give Up – Keep Going! 💪</h1>
+            </div>
+            <div style="padding: 20px; font-size: 16px; color: #333;">
+                <p>Your test has been graded, and unfortunately, you didn't pass this time. But don't be discouraged—this is just one step in your journey.</p>
+                <p>Use this as an opportunity to improve and come back stronger! Click below to review your results and see where you can improve:</p>
+                <div style="text-align: center; margin-top: 20px;">
+                    <a href="{link}" style="padding: 12px 24px; background-color: #099f9e; color: white; text-decoration: none; border-radius: 5px; font-size: 16px; display: inline-block;">View Results</a>
+                </div>
+                <p style="margin-top: 20px;">Remember, progress takes time, and every challenge is a learning experience. Keep pushing forward—we believe in you! 🚀</p>
+            </div>
+            <hr style="border: none; border-top: 1px solid #ddd; margin: 20px 0;">
+            <p style="font-size: 12px; text-align: center; color: #777;">This is an automated email. Please do not reply. If you need assistance, contact us at <a href="mailto:support@naatininja.com" style="color: #099f9e; text-decoration: none;">support@naatininja.com</a>.</p>
+        </div>
+    </body>
+    </html>
+    """
+
+    subject = "🎉 Congratulations! You Passed Your NAATI Ninja Test" if passed else "📊 Keep Going! Your NAATI Ninja Test Results Are In"
+    body = passed_template if passed else failed_template
+
+    # Postmark API request
+    postmark_url = "https://api.postmarkapp.com/email"
+    headers = {
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+        "X-Postmark-Server-Token": POSTMARK_API_TOKEN
+    }
+
+    payload = {
+        "From": EMAIL_USER,
+        "To": recipient_email,
+        "Subject": subject,
+        "HtmlBody": body,
+        "MessageStream": "outbound"
+    }
+
+    try:
+        response = requests.post(postmark_url, json=payload, headers=headers)
+        response.raise_for_status()  # Raise an error if request fails
+        print(f"Email successfully sent to {recipient_email}")
+    except requests.exceptions.RequestException as e:
+        print(f"[-] Error sending email: {e}")
+
+
+def fetch_user_from_clerk(user_id):
+    """
+    Fetches user data from Clerk API using the provided user ID.
+
+    Args:
+        user_id (str): The ID of the user to fetch.
+
+    Returns:
+        dict: User data if found, otherwise None.
+    """
+    # Load environment variables
+    load_dotenv()
+
+    # Get the Clerk secret key from environment variables
+    CLERK_SECRET_KEY = os.getenv("CLERK_SECRET_KEY")
+    if not CLERK_SECRET_KEY:
+        raise ValueError("CLERK_SECRET_KEY environment variable is not set.")
+
+    # Define the Clerk API URL
+    clerk_api_url = f"https://api.clerk.dev/v1/users/{user_id}"
+
+    try:
+        # Make a GET request to fetch user data
+        response = requests.get(clerk_api_url, headers={
+                                "Authorization": f"Bearer {CLERK_SECRET_KEY}"})
+
+        # Check if the request was successful
+        if response.status_code == 200:
+            return response.json()
+        else:
+            print(
+                f"Failed to fetch user data. Status code: {response.status_code}, Response: {response.text}")
+            return None
+    except Exception as e:
+        print(f"Error fetching user data from Clerk: {e}")
+        return None
+
+# Example usage
