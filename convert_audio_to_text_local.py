@@ -1,6 +1,7 @@
 import whisper
 import torch
 
+
 def transcribe(audio_file, language):
     """
     Transcribes the given audio data using the Whisper speech recognition model.
@@ -19,3 +20,9 @@ def transcribe(audio_file, language):
     # audio = model.load_audio(audio_file)
     result = model.transcribe(audio_file, fp16=True, language=language)
     return result
+
+
+file_name = '/home/gojira/Desktop/oberoi.io/naati/data/data/thyroid_test.ogg'
+transcription = transcribe(file_name, 'en')
+
+print(transcription)
