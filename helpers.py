@@ -16,7 +16,7 @@ from openai import OpenAI
 import torch
 from langcodes import Language
 
-from models.schema import MockAnswers, MockQuestions, UserMocks
+from models.schema import MockAnswers, MockQuestions, UserMocks, Subscriptions
 from sqlalchemy.orm import Session
 from sqlalchemy import and_
 # from sqlalchemy.orm import joinedload
@@ -70,7 +70,8 @@ def extract_score(ai_response) -> int:
 
 def get_user_mocks(session: Session):
     """
-    Fetch all UserMocks with total_score as NULL and attempts as 0.
+    Fetch all UserMocks with total_score as NULL and attempts as 0,
+    only for users whose subscription has payment_required = False.
 
     Args:
         session (Session): SQLAlchemy database session object.
@@ -79,10 +80,13 @@ def get_user_mocks(session: Session):
         List[UserMocks]: A list of UserMocks objects matching the criteria.
     """
     try:
-        results = session.query(UserMocks).filter(
+        results = session.query(UserMocks).join(
+            Subscriptions, UserMocks.user_id == Subscriptions.user_id
+        ).filter(
             and_(
-                UserMocks.total_score.is_(None),  # total_score is NULL
-                UserMocks.attempts == 0          # attempts is 0
+                UserMocks.total_score.is_(None),
+                UserMocks.attempts == 0,
+                Subscriptions.payment_required == False
             )
         ).all()
         return results
@@ -116,31 +120,29 @@ def get_mock_answers_by_user_mock_id(session: Session, user_mock_id: str):
 def fetch_mock_answers(session: Session):
     """
     Fetch all mock_answers where transcript and score are NULL,
-    including the answer_language from the mock_questions table.
+    and only for users whose subscription has payment_required = False.
+    Includes the answer_language from the mock_questions table.
 
     Args:
         session (Session): SQLAlchemy database session object.
 
     Returns:
         List[tuple]: A list of tuples, each containing a MockAnswers object 
-                     and the corresponding answer_language from mock_questions.
+                     and the corresponding MockQuestions object.
     """
-
-    # results = session.query(MockAnswers).filter(
-    #     and_(
-    #         MockAnswers.transcript == None,
-    #         MockAnswers.score == None
-    #     )
-    # ).all()
 
     results = session.query(MockAnswers, MockQuestions).join(
         MockQuestions, MockAnswers.mock_question_id == MockQuestions.id
+    ).join(
+        Subscriptions, MockAnswers.user_id == Subscriptions.user_id
     ).filter(
         and_(
             MockAnswers.transcript == None,
-            MockAnswers.score == None
+            MockAnswers.score == None,
+            Subscriptions.payment_required == False
         )
     ).all()
+
     return results
 
 
@@ -424,6 +426,8 @@ def openai_transcribe(audio_file, language, api_key):
         iso_lang = "zh"
     elif language.lower() == "tamil":
         iso_lang = "ta"
+    if language.lower() == "punjabi":
+        iso_lang = "pa"
     else:
         iso_lang = "en"
     lang = Language.get(iso_lang).is_valid()

@@ -63,6 +63,8 @@ config.mk
 config.stamp
 no_llvm_build
 
+download/*
+
 ## Build
 /dl/
 /doc/

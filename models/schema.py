@@ -84,6 +84,8 @@ class UserMocks(Base):
     total_score = Column(Integer, nullable=True)  # Nullable total score
     passed = Column(Boolean, nullable=True)  # Nullable passed status
     expired = Column(Boolean, default=False)  # Default expired status
+    needs_payment_before_grading = Column(
+        Boolean, default=False)
     # Timestamp with default to current time
     created_on = Column(DateTime, default=datetime.utcnow)
 
@@ -92,3 +94,15 @@ class UserMocks(Base):
     mock = relationship("Mocks", back_populates="user_mocks")
     # One-to-many relationship with MockAnswers
     mock_answers = relationship("MockAnswers", back_populates="user_mock")
+
+
+class Subscriptions(Base):
+    __tablename__ = 'subscriptions'
+
+    id = Column(String, primary_key=True, index=True)
+    user_id = Column(String, index=True)
+    mocks_available = Column(Integer)
+    mocks_used = Column(Integer)
+    payment_required = Column(Boolean, default=False)
+    expires_on = Column(DateTime, nullable=True)
+    created_on = Column(DateTime)
