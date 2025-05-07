@@ -411,44 +411,42 @@ def openai_transcribe(audio_file, language, api_key):
     Transcribes the given audio data using the Whisper speech recognition model.
 
     Args:
-        audio_np: The audio data to be transcribed.
+        audio_file: The audio file path to be transcribed.
+        language: The spoken language in the audio.
+        api_key: OpenAI API key.
 
     Returns:
         str: The transcribed text.
     """
     client = OpenAI(api_key=api_key)
 
-    if language.lower() == "english":
-        iso_lang = "en"
-    elif language.lower() == "hindi":
-        iso_lang = "hi"
-    elif language.lower() == "mandarin":
-        iso_lang = "zh"
-    elif language.lower() == "tamil":
-        iso_lang = "ta"
-    if language.lower() == "punjabi":
-        iso_lang = "pa"
-    else:
-        iso_lang = "en"
+    # Use a dictionary for language mapping
+    lang_map = {
+        "english": "en",
+        "hindi": "hi",
+        "mandarin": "zh",
+        "tamil": "ta",
+        "punjabi": "pa",
+        "sinhala": "si",
+        "nepali": "ne",
+        "spanish": "es",
+        "urdu": "ur"
+    }
+    iso_lang = lang_map.get(language.lower(), "en")
+
     lang = Language.get(iso_lang).is_valid()
-    # lang = Language.get(language[:3]).is_valid()
     print(f"-> Language: {language} {iso_lang} {lang}")
+    audio_file = open(audio_file, "rb")
     if lang is True:
-        # lang = Language.get(iso_lang).to_tag()
-        # iso_lang = Language.get(language[:3]).to_tag()
-        audio_file = open(audio_file, "rb")
         translation = client.audio.transcriptions.create(
             model="whisper-1",
             language=iso_lang,
             file=audio_file,
         )
     else:
-        audio_file = open(audio_file, "rb")
         translation = client.audio.transcriptions.create(
             model="whisper-1",
-            # language=iso_lang,
             file=audio_file,
-            # response_format="text"
         )
     print("-> Translation ", translation.text)
     return translation.text

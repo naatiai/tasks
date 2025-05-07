@@ -146,20 +146,19 @@ for i, qa in enumerate(mock_answers):
         print(f"[-] Error updaring Answer: {ex}, Loop {i}")
         continue
 
+    # Delete Audio File from Supabase
+    try:
+        # Delete the file
+        success = delete_supabase_file(
+            prefix, file_name, SUPABASE_BUCKET, SUPABASE_URL, SUPABASE_KEY)
 
-# Delete Audio File from Supabase
-    # try:
-    #     # Delete the file
-    #     success = delete_supabase_file(
-    #         prefix, file_name, SUPABASE_BUCKET, SUPABASE_URL, SUPABASE_KEY)
+        if success:
+            print("File deleted successfully.")
+        else:
+            print("Failed to delete the file.")
 
-    #     if success:
-    #         print("File deleted successfully.")
-    #     else:
-    #         print("Failed to delete the file.")
-
-    # except Exception as ex:
-    #     print(f"[-] Error updaring userMock: {ex}, Loop {i}")
+    except Exception as ex:
+        print(f"[-] Error updaring userMock: {ex}, Loop {i}")
 
 # Close the session
 session.close()
