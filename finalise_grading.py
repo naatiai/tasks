@@ -8,7 +8,8 @@ from helpers import (
     update_user_mock,
     fetch_user_from_clerk,
     send_test_result_email,
-    get_mock_question_count
+    get_mock_question_count,
+    send_test_result_email_sendgrid
 )
 
 # Load environment variables from .env file
@@ -64,7 +65,8 @@ for user_mock in user_mocks:
             link = f"https://app.naatininja.com/mock-test/{user_mock.mock_id}"
             recipient_email = fetch_user_from_clerk(user_mock.user_id)
             to_email = recipient_email['email_addresses'][0]['email_address']
-            send_test_result_email(to_email, link, passed=passed)
+            # send_test_result_email(to_email, link, passed=passed) # Credits reset on 21 May 2025
+            send_test_result_email_sendgrid(to_email, link, passed=passed)
         else:
             print("[-] Failed to update UserMocks.")
     except Exception as ex:

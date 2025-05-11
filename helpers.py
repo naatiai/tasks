@@ -452,6 +452,104 @@ def openai_transcribe(audio_file, language, api_key):
     return translation.text
 
 
+def send_test_result_email_sendgrid(recipient_email: str, link: str, passed: bool):
+    """
+    Sends an email to notify the user of their test result via SendGrid.
+
+    Args:
+        recipient_email (str): The recipient's email address.
+        link (str): The link to view detailed results.
+        passed (bool): True if the user passed, False otherwise.
+    """
+    # Load environment variables
+    load_dotenv()
+
+    SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY")
+    EMAIL_USER = os.getenv("EMAIL_USER", "support@naatininja.com")
+
+    if not SENDGRID_API_KEY:
+        raise ValueError(
+            "[-] SENDGRID_API_KEY must be set in the environment variables.")
+
+    passed_template = f"""
+    <html>
+    <body style="font-family: Arial, sans-serif; background-color: #f4f4f4; margin: 0; padding: 20px;">
+        <div style="max-width: 600px; margin: auto; background: #ffffff; padding: 20px; border-radius: 8px; border: 1px solid #ddd;">
+            <div style="text-align: center; padding: 20px 0; color: black;">
+                <img src='https://app.naatininja.com/logo.png' alt='NAATI Ninja' style='width: 150px; margin-bottom: 20px;'>
+                <h1 style="color: #333;">Fantastic News, You Passed! 🎉</h1>
+            </div>
+            <div style="padding: 20px; font-size: 16px; color: #333;">
+                <p>Great job! Your test has been graded, and we're excited to let you know that you've <b>passed</b>! All your effort and dedication have paid off. 🎊</p>
+                <p>Click below to view your detailed results:</p>
+                <div style="text-align: center; margin-top: 20px;">
+                    <a href="{link}" style="padding: 12px 24px; background-color: #f7941e; color: white; text-decoration: none; border-radius: 5px; font-size: 16px; display: inline-block;">View Results</a>
+                </div>
+                <p style="margin-top: 20px;">Keep up the great work, and best of luck with your journey ahead!</p>
+            </div>
+            <hr style="border: none; border-top: 1px solid #ddd; margin: 20px 0;">
+            <p style="font-size: 12px; text-align: center; color: #777;">This is an automated email. Please do not reply. If you need assistance, contact us at <a href="mailto:support@naatininja.com" style="color: #099f9e; text-decoration: none;">support@naatininja.com</a>.</p>
+        </div>
+    </body>
+    </html>
+    """
+
+    failed_template = f"""
+    <html>
+    <body style="font-family: Arial, sans-serif; background-color: #f4f4f4; margin: 0; padding: 20px;">
+        <div style="max-width: 600px; margin: auto; background: #ffffff; padding: 20px; border-radius: 8px; border: 1px solid #ddd;">
+            <div style="text-align: center; padding: 20px 0; color: black;">
+                <img src='https://app.naatininja.com/logo.png' alt='NAATI Ninja' style='width: 150px; margin-bottom: 20px;'>
+                <h1 style="color: #333;">Don't Give Up – Keep Going! 💪</h1>
+            </div>
+            <div style="padding: 20px; font-size: 16px; color: #333;">
+                <p>Your test has been graded, and unfortunately, you didn't pass this time. But don't be discouraged—this is just one step in your journey.</p>
+                <p>Use this as an opportunity to improve and come back stronger! Click below to review your results and see where you can improve:</p>
+                <div style="text-align: center; margin-top: 20px;">
+                    <a href="{link}" style="padding: 12px 24px; background-color: #099f9e; color: white; text-decoration: none; border-radius: 5px; font-size: 16px; display: inline-block;">View Results</a>
+                </div>
+                <p style="margin-top: 20px;">Remember, progress takes time, and every challenge is a learning experience. Keep pushing forward—we believe in you! 🚀</p>
+            </div>
+            <hr style="border: none; border-top: 1px solid #ddd; margin: 20px 0;">
+            <p style="font-size: 12px; text-align: center; color: #777;">This is an automated email. Please do not reply. If you need assistance, contact us at <a href="mailto:support@naatininja.com" style="color: #099f9e; text-decoration: none;">support@naatininja.com</a>.</p>
+        </div>
+    </body>
+    </html>
+    """
+
+    subject = "🎉 Congratulations! You Passed Your NAATI Ninja Test" if passed else "📊 Keep Going! Your NAATI Ninja Test Results Are In"
+    body = passed_template if passed else failed_template
+
+    sendgrid_url = "https://api.sendgrid.com/v3/mail/send"
+    headers = {
+        "Authorization": f"Bearer {SENDGRID_API_KEY}",
+        "Content-Type": "application/json"
+    }
+
+    payload = {
+        "personalizations": [
+            {
+                "to": [{"email": recipient_email}],
+                "subject": subject
+            }
+        ],
+        "from": {"email": EMAIL_USER},
+        "content": [
+            {
+                "type": "text/html",
+                "value": body
+            }
+        ]
+    }
+
+    try:
+        response = requests.post(sendgrid_url, json=payload, headers=headers)
+        response.raise_for_status()
+        print(f"Email successfully sent to {recipient_email} via SendGrid")
+    except requests.exceptions.RequestException as e:
+        print(f"[-] Error sending email via SendGrid: {e}")
+
+
 def send_test_result_email(recipient_email: str, link: str, passed: bool):
     """
     Sends an email to notify the user of their test result via Postmark.
